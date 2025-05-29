@@ -29,8 +29,8 @@ jobs:
           python -c "
           import os
           print('Environment variables available:', list(os.environ.keys()))
-          mongodb_uri = os.getenv('ANKIT_MONGO_URI')  # Changed to match your secret name
-          print('ANKIT_MONGO_URI value exists:', bool(mongodb_uri))
+          mongodb_uri = os.getenv('MONGO_URI')
+          print('MONGO_URI value exists:', bool(mongodb_uri))
           
           if not mongodb_uri:
               print('ERROR: No MongoDB URI found in environment variables')
@@ -46,11 +46,11 @@ jobs:
               exit(1)
           "
         env:
-          ANKIT_MONGO_URI: ${{ secrets.ANKIT_MONGO_URI }}  # Changed to match your secret name
+          MONGO_URI: ${{ secrets.MONGO_URI }}
       
       - name: Run tests
         run: |
           pytest -v
         env:
-          ANKIT_MONGO_URI: ${{ secrets.ANKIT_MONGO_URI }}  # Changed to match your secret name
+          MONGO_URI: ${{ secrets.MONGO_URI }}
           PYTHONPATH: ${{ github.workspace }}
