@@ -11,10 +11,15 @@ app = Flask(__name__)
 
 # Connect to MongoDB
 load_dotenv()  # Load from .env file
-client = MongoClient(os.environ.get("ANKIT_MONGO_URI"))  # Replace with your MongoDB URI
+mongodb_uri = os.getenv('ANKIT_MONGODB_URI', 'mongodb://localhost:27017')
+client = MongoClient(mongodb_uri)
 db = client["ankit_students_db"]  # Database name
 students_collection = db["students"]  # Collection name
-# students_collection = os.environ.get("MONGO_URI")
+
+# mongodb_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
+# client = MongoClient(mongodb_uri)
+# db = client.get_database('student_db')  # or whatever your database name is
+# students_collection = db.students
 
 # Database functions
 def add_student(data):
