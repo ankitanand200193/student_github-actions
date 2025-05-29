@@ -9,12 +9,19 @@ import os
 # Initialize Flask app
 app = Flask(__name__)
 
+mongodb_uri = os.environ.get('MONGODB_URI')
+if not mongodb_uri:
+    raise ValueError("No MongoDB URI found in environment variables")
+
 # Connect to MongoDB
 load_dotenv()  # Load from .env file
 mongodb_uri = os.getenv('ANKIT_MONGODB_URI', 'mongodb://localhost:27017')
 client = MongoClient(mongodb_uri)
 db = client["ankit_students_db"]  # Database name
 students_collection = db["students"]  # Collection name
+
+# Print connection status for debugging
+print(f"MongoDB Connection Status: {client.server_info()}")
 
 # mongodb_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
 # client = MongoClient(mongodb_uri)
