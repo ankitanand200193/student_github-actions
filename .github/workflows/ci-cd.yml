@@ -11,42 +11,39 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v2
-    
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest python-dotenv
-    
-    - name: Debug MongoDB Connection
-      run: |
-        python -c "
-
-import os
-
-from pymongo import MongoClient
-
-uri = os.environ.get('ANKIT_MONGODB_URI')
-print('MongoDB URI exists:', bool(uri))
-try:
-    client = MongoClient(uri)
-    client.admin.command('ping')
-    print('MongoDB connection successful')
-except Exception as e:
-    print('MongoDB connection failed:', str(e))
-        "
-      env:
-        MONGODB_URI: ${{ secrets.ANKIT_MONGO_URI }}
-    
-    - name: Run tests
-      run: |
-        pytest -v
-      env:
-        MONGODB_URI: ${{ secrets.ANKIT_MONGO_URI }}
-        PYTHONPATH: ${{ github.workspace }}
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest python-dotenv
+      
+      - name: Debug MongoDB Connection
+        run: |
+          python -c "
+          import os
+          from pymongo import MongoClient
+          uri = os.environ.get('ANKIT_MONGODB_URI')
+          print('MongoDB URI exists:', bool(uri))
+          try:
+              client = MongoClient(uri)
+              client.admin.command('ping')
+              print('MongoDB connection successful')
+          except Exception as e:
+              print('MongoDB connection failed:', str(e))
+          "
+        env:
+          MONGODB_URI: ${{ secrets.ANKIT_MONGO_URI }}
+      
+      - name: Run tests
+        run: |
+          pytest -v
+        env:
+          MONGODB_URI: ${{ secrets.ANKIT_MONGO_URI }}
+          PYTHONPATH: ${{ github.workspace }}
