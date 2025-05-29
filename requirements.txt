@@ -1,0 +1,5 @@
+Werkzeug<3.0.0
+python-dotenv
+Flask==2.3.3
+pymongo==4.6.1
+pytest==8.2.0
