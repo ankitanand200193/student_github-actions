@@ -24,6 +24,11 @@ jobs:
         pip install -r requirements.txt
         pip install pytest
     
+    - name: Debug Environment
+      run: |
+        echo "Checking if MONGODB_URI is set (will not print value)"
+        if [ -n "$MONGODB_URI" ]; then echo "MONGODB_URI is set"; else echo "MONGODB_URI is not set"; fi
+    
     - name: Run tests
       run: |
         pytest -v
