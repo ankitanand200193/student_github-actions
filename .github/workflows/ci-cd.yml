@@ -22,12 +22,27 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest
+        pip install pytest python-dotenv
     
-    - name: Debug Environment
+    - name: Debug MongoDB Connection
       run: |
-        echo "Checking if MONGODB_URI is set (will not print value)"
-        if [ -n "$MONGODB_URI" ]; then echo "MONGODB_URI is set"; else echo "MONGODB_URI is not set"; fi
+        python -c "
+
+import os
+
+from pymongo import MongoClient
+
+uri = os.environ.get('ANKIT_MONGODB_URI')
+print('MongoDB URI exists:', bool(uri))
+try:
+    client = MongoClient(uri)
+    client.admin.command('ping')
+    print('MongoDB connection successful')
+except Exception as e:
+    print('MongoDB connection failed:', str(e))
+        "
+      env:
+        MONGODB_URI: ${{ secrets.ANKIT_MONGO_URI }}
     
     - name: Run tests
       run: |
