@@ -14,12 +14,12 @@ app = Flask(__name__)
 # MongoDB Connection Setup
 try:
     # Try to get MongoDB URI from environment variables
-    mongodb_uri = os.getenv('MONGODB_URI') or os.getenv('ANKIT_MONGO_URI')
+    mongodb_uri = os.getenv('MONGO_URI')
     
     if not mongodb_uri:
         raise ValueError("""
         No MongoDB URI found in environment variables. 
-        Please set either MONGODB_URI or ANKIT_MONGO_URI environment variable.
+        Please set MONGO_URI environment variable.
         Available environment variables: {}
         """.format(list(os.environ.keys())))
 
