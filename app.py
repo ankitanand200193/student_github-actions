@@ -5,43 +5,56 @@ from bson.regex import Regex
 from dotenv import load_dotenv
 import os
 
+# Load environment variables first
+load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
 
-mongodb_uri = os.environ.get('MONGODB_URI')
-if not mongodb_uri:
-    raise ValueError("No MongoDB URI found in environment variables")
+# MongoDB Connection Setup
+try:
+    # Try to get MongoDB URI from environment variables
+    mongodb_uri = os.getenv('MONGODB_URI') or os.getenv('ANKIT_MONGO_URI')
+    
+    if not mongodb_uri:
+        raise ValueError("""
+        No MongoDB URI found in environment variables. 
+        Please set either MONGODB_URI or ANKIT_MONGO_URI environment variable.
+        Available environment variables: {}
+        """.format(list(os.environ.keys())))
 
-# Connect to MongoDB
-load_dotenv()  # Load from .env file
-mongodb_uri = os.getenv('ANKIT_MONGODB_URI', 'mongodb://localhost:27017')
-client = MongoClient(mongodb_uri)
-db = client["ankit_students_db"]  # Database name
-students_collection = db["students"]  # Collection name
+    # Connect to MongoDB
+    client = MongoClient(mongodb_uri)
+    
+    # Test connection
+    client.admin.command('ping')
+    print("Connected to MongoDB successfully!")
+    
+    # Set up database and collection
+    db = client["ankit_students_db"]
+    students_collection = db["students"]
 
-# Print connection status for debugging
-print(f"MongoDB Connection Status: {client.server_info()}")
-
-# mongodb_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
-# client = MongoClient(mongodb_uri)
-# db = client.get_database('student_db')  # or whatever your database name is
-# students_collection = db.students
+except Exception as e:
+    print(f"Error connecting to MongoDB: {e}")
+    raise
 
 # Database functions
 def add_student(data):
     student = {"name": data["name"], "age": data["age"]}
     result = students_collection.insert_one(student)
-    student["_id"] = str(result.inserted_id)  # Convert ObjectId to string
+    student["_id"] = str(result.inserted_id)
     return student
 
 def get_students():
-    return [{"_id": str(student["_id"]), "name": student["name"], "age": student["age"]} for student in students_collection.find()]
+    return [{"_id": str(student["_id"]), 
+             "name": student["name"], 
+             "age": student["age"]} 
+            for student in students_collection.find()]
 
 def get_student_by_id(student_id):
     student = students_collection.find_one({"_id": ObjectId(student_id)})
     if student:
-        student["_id"] = str(student["_id"])  # Convert ObjectId to string
+        student["_id"] = str(student["_id"])
     return student
 
 def delete_student(student_id):
@@ -79,9 +92,13 @@ def delete(student_id):
 
 @app.route('/students/name/<string:name>', methods=['GET'])
 def get_by_name(name):
-    # Use regex to find students by name
-    students = students_collection.find({"name": {"$regex": f".*{name}.*", "$options": "i"}})
-    students_list = [{"_id": str(student["_id"]), "name": student["name"], "age": student["age"]} for student in students]
+    students = students_collection.find(
+        {"name": {"$regex": f".*{name}.*", "$options": "i"}}
+    )
+    students_list = [{"_id": str(student["_id"]), 
+                     "name": student["name"], 
+                     "age": student["age"]} 
+                    for student in students]
     if students_list:
         return jsonify(students_list), 200
     return jsonify({"error": "No students found with the given name"}), 404
