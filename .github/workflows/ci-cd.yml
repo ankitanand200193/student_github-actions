@@ -24,22 +24,13 @@ jobs:
           pip install -r requirements.txt
           pip install pytest python-dotenv
       
-      - name: Debug Environment Variables
-        run: |
-          echo "Checking for MongoDB URI..."
-          if [ -n "$ANKIT_MONGODB_URI" ]; then
-            echo "ANKIT_MONGODB_URI is set"
-          else
-            echo "MONGODB_URI is NOT set"
-          fi
-      
       - name: Debug MongoDB Connection
         run: |
           python -c "
           import os
           print('Environment variables available:', list(os.environ.keys()))
-          mongodb_uri = os.getenv('ANKIT_MONGODB_URI')
-          print('MONGODB_URI value exists:', bool(mongodb_uri))
+          mongodb_uri = os.getenv('ANKIT_MONGO_URI')  # Changed to match your secret name
+          print('ANKIT_MONGO_URI value exists:', bool(mongodb_uri))
           
           if not mongodb_uri:
               print('ERROR: No MongoDB URI found in environment variables')
@@ -55,11 +46,11 @@ jobs:
               exit(1)
           "
         env:
-          MONGODB_URI: ${{ secrets.ANKIT_MONGO_URI }}
+          ANKIT_MONGO_URI: ${{ secrets.ANKIT_MONGO_URI }}  # Changed to match your secret name
       
       - name: Run tests
         run: |
           pytest -v
         env:
-          MONGODB_URI: ${{ secrets.ANKIT_MONGO_URI }}
+          ANKIT_MONGO_URI: ${{ secrets.ANKIT_MONGO_URI }}  # Changed to match your secret name
           PYTHONPATH: ${{ github.workspace }}
