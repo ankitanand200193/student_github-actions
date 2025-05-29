@@ -1,11 +1,14 @@
+import os
 import pytest
 from app import app, students_collection, add_student, get_students, get_student_by_id, delete_student
 from bson import ObjectId
 
 @pytest.fixture(autouse=True)
-def cleanup_db():
-    # Clean up test data before each test
+def setup_test_db():
+    # This ensures we're using the right MongoDB connection
+    # Clear the collection before each test
     students_collection.delete_many({})
+    yield
 
 @pytest.fixture
 def client():
