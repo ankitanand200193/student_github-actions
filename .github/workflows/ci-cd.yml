@@ -36,30 +36,30 @@ jobs:
 
       - name: Decode SSH Key
         run: |
-          echo "${{ secrets.AWS_SSH_KEY }}"  > key.pem
+          echo "${{ secrets.AWS_SSH_KEY }}" | base64 -d > key.pem
           chmod 600 key.pem
 
       - name: Deploy to EC2
         if: github.ref == 'refs/heads/staging' || github.event_name == 'release'
+        env:
+          HOST: ${{ github.ref == 'refs/heads/staging' && secrets.STAGING_HOST || secrets.PROD_HOST }}
+          BRANCH: ${{ github.ref == 'refs/heads/staging' && 'staging' || 'main' }}
         run: |
-          HOST=""
-          BRANCH=""
-          if [ "${{ github.ref }}" == "refs/heads/staging" ]; then
-            HOST=${{ secrets.STAGING_HOST }}
-            BRANCH="staging"
-          elif [ "${{ github.event_name }}" == "release" ]; then
-            HOST=${{ secrets.PROD_HOST }}
-            BRANCH="main"
+          set -e
+          if [ -z "$HOST" ]; then
+            echo "Error: HOST is not set"
+            exit 1
           fi
 
           ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@$HOST <<EOF
-            cd app
+            set -e
+            cd app || { echo "Failed to cd into app directory"; exit 1; }
             git fetch --all
             git checkout $BRANCH
             git pull origin $BRANCH
             echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
-            python3 -m venv venv
-            source venv/bin/activate
+            python3 -m venv venv || echo "Virtual environment already exists"
+            source venv/bin/activate || { echo "Failed to activate venv"; exit 1; }
             pip install -r requirements.txt
-            sudo systemctl restart flaskapp
+            sudo systemctl restart flaskapp || { echo "Failed to restart flaskapp"; exit 1; }
           EOF
