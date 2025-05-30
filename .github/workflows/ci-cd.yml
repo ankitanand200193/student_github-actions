@@ -31,63 +31,72 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
 
   deploy-staging:
-    needs: test
-    if: github.ref == 'refs/heads/staging'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v2
+      needs: test
+      if: github.ref == 'refs/heads/staging'
+      runs-on: ubuntu-latest
       
-      - name: Copy files to staging
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.AWS_SSH_KEY }}
-          source: "."
-          target: "~/app"
-      
-      - name: Deploy to Staging
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.AWS_SSH_KEY }}
-          script: |
-            echo "Setting up application..."
-            cd ~/app
-            
-            echo "Killing existing process if any..."
-            pkill -f "python app.py" || true
-            
-            echo "Setting up Python environment..."
-            python3 -m venv venv
-            source venv/bin/activate
-            
-            echo "Installing requirements..."
-            pip install -r requirements.txt
-            
-            echo "Setting up environment variables..."
-            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
-            
-            echo "Starting application..."
-            nohup python app.py > app.log 2>&1 &
-            
-            echo "Waiting for application to start..."
-            sleep 5
-            
-            echo "Checking if application is running..."
-            if pgrep -f "python app.py" > /dev/null; then
-                echo "Application started successfully"
-                tail -n 10 app.log
-            else
-                echo "Application failed to start"
-                cat app.log
-                exit 1
-            fi
-            
-            echo "Checking port usage..."
-            netstat -tulnp | grep 5000 || true
+      steps:
+        - uses: actions/checkout@v2
+        
+        - name: Copy files to staging
+          uses: appleboy/scp-action@master
+          with:
+            host: ${{ secrets.STAGING_HOST }}
+            username: ${{ secrets.STAGING_USER }}
+            key: ${{ secrets.AWS_SSH_KEY }}
+            source: "."
+            target: "~/app"
+        
+        - name: Deploy to Staging
+          uses: appleboy/ssh-action@master
+          with:
+            host: ${{ secrets.STAGING_HOST }}
+            username: ${{ secrets.STAGING_USER }}
+            key: ${{ secrets.AWS_SSH_KEY }}
+            script: |
+              echo "Setting up application..."
+              cd ~/app
+              
+              echo "Cleaning up existing process..."
+              if pgrep -f "python app.py" > /dev/null; then
+                  echo "Stopping existing process..."
+                  pkill -f "python app.py"
+                  sleep 2
+              else
+                  echo "No existing process found"
+              fi
+              
+              echo "Setting up Python environment..."
+              python3 -m venv venv || echo "Virtual environment might already exist"
+              source venv/bin/activate
+              
+              echo "Installing requirements..."
+              pip install -r requirements.txt
+              
+              echo "Setting up environment variables..."
+              echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
+              
+              echo "Starting application..."
+              nohup python app.py > app.log 2>&1 &
+              
+              echo "Waiting for application to start..."
+              sleep 5
+              
+              echo "Checking if application is running..."
+              if pgrep -f "python app.py" > /dev/null; then
+                  echo "Application started successfully"
+                  echo "Process ID: $(pgrep -f 'python app.py')"
+                  echo "Last few lines of log:"
+                  tail -n 10 app.log
+                  echo "Port status:"
+                  netstat -tulnp | grep 5000 || echo "Port info not available"
+                  exit 0
+              else
+                  echo "Application failed to start"
+                  echo "Log contents:"
+                  cat app.log
+                  exit 1
+              fi
 
   deploy-production:
     needs: [test]
