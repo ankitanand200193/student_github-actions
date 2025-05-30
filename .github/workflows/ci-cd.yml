@@ -57,12 +57,6 @@ jobs:
             mkdir -p app
             cd app || { echo "Failed to cd into app directory"; exit 1; }
             
-            # Initialize git repo if not already initialized
-            if [ ! -d .git ]; then
-              git init
-              git remote add origin https://github.com/ankitanand200193/student_github-actions.git
-            fi
-            
             git fetch --all
             git checkout $BRANCH || git checkout -b $BRANCH
             git pull origin $BRANCH
