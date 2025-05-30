@@ -53,7 +53,7 @@ jobs:
           fi
 
           ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@$HOST <<EOF
-            cd GithubActions_FlaskApp
+            cd app
             git fetch --all
             git checkout $BRANCH
             git pull origin $BRANCH
