@@ -36,7 +36,7 @@ jobs:
 
       - name: Decode SSH Key
         run: |
-          echo "${{ secrets.AWS_SSH_KEY }}" | base64 --decode > key.pem
+          echo "${{ secrets.AWS_SSH_KEY }}"  > key.pem
           chmod 600 key.pem
 
       - name: Deploy to EC2
