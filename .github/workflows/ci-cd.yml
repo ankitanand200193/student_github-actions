@@ -11,27 +11,46 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v2
-    
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest
-    
-    - name: Debug Environment
-      run: |
-        echo "Checking if MONGODB_URI is set (will not print value)"
-        if [ -n "$MONGODB_URI" ]; then echo "MONGODB_URI is set"; else echo "MONGODB_URI is not set"; fi
-    
-    - name: Run tests
-      run: |
-        pytest -v
-      env:
-        MONGODB_URI: ${{ secrets.ANKIT_MONGO_URI }}
-        PYTHONPATH: ${{ github.workspace }}
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest python-dotenv
+      
+      - name: Debug MongoDB Connection
+        run: |
+          python -c "
+          import os
+          print('Environment variables available:', list(os.environ.keys()))
+          mongodb_uri = os.getenv('MONGO_URI')
+          print('MONGO_URI value exists:', bool(mongodb_uri))
+          
+          if not mongodb_uri:
+              print('ERROR: No MongoDB URI found in environment variables')
+              exit(1)
+          
+          from pymongo import MongoClient
+          try:
+              client = MongoClient(mongodb_uri)
+              client.admin.command('ping')
+              print('MongoDB connection successful')
+          except Exception as e:
+              print('MongoDB connection failed:', str(e))
+              exit(1)
+          "
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+      
+      - name: Run tests
+        run: |
+          pytest -v
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          PYTHONPATH: ${{ github.workspace }}
