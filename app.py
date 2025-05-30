@@ -103,5 +103,7 @@ def get_by_name(name):
         return jsonify(students_list), 200
     return jsonify({"error": "No students found with the given name"}), 404
 
+#if __name__ == '__main__':
+ #   app.run(debug=True, host='0.0.0.0', port=5000)
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=False)
