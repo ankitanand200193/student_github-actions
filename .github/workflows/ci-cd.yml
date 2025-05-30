@@ -9,7 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v2
       
@@ -24,33 +23,103 @@ jobs:
           pip install -r requirements.txt
           pip install pytest python-dotenv
       
-      - name: Debug MongoDB Connection
-        run: |
-          python -c "
-          import os
-          print('Environment variables available:', list(os.environ.keys()))
-          mongodb_uri = os.getenv('MONGO_URI')
-          print('MONGO_URI value exists:', bool(mongodb_uri))
-          
-          if not mongodb_uri:
-              print('ERROR: No MongoDB URI found in environment variables')
-              exit(1)
-          
-          from pymongo import MongoClient
-          try:
-              client = MongoClient(mongodb_uri)
-              client.admin.command('ping')
-              print('MongoDB connection successful')
-          except Exception as e:
-              print('MongoDB connection failed:', str(e))
-              exit(1)
-          "
-        env:
-          MONGO_URI: ${{ secrets.MONGO_URI }}
-      
       - name: Run tests
         run: |
           pytest -v
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           PYTHONPATH: ${{ github.workspace }}
+
+  deploy-staging:
+    needs: test
+    if: github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy to Staging
+        run: |
+          scp -r ./* ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}:~/app
+          ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} '
+            cd ~/app
+            sudo apt-get update
+            sudo apt-get install -y python3-pip python3-venv
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install -r requirements.txt
+            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
+            # Setup systemd service
+            sudo tee /etc/systemd/system/flask-app.service << EOF
+            [Unit]
+            Description=Flask App
+            After=network.target
+
+            [Service]
+            User=${{ secrets.STAGING_USER }}
+            WorkingDirectory=/home/${{ secrets.STAGING_USER }}/app
+            Environment="PATH=/home/${{ secrets.STAGING_USER }}/app/venv/bin"
+            ExecStart=/home/${{ secrets.STAGING_USER }}/app/venv/bin/python app.py
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+            sudo systemctl daemon-reload
+            sudo systemctl restart flask-app
+            sudo systemctl enable flask-app
+          '
+
+  deploy-production:
+    needs: [test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy to Production
+        run: |
+          scp -r ./* ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:~/app
+          ssh ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} '
+            cd ~/app
+            sudo apt-get update
+            sudo apt-get install -y python3-pip python3-venv
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install -r requirements.txt
+            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
+            # Setup systemd service
+            sudo tee /etc/systemd/system/flask-app.service << EOF
+            [Unit]
+            Description=Flask App
+            After=network.target
+
+            [Service]
+            User=${{ secrets.PROD_USER }}
+            WorkingDirectory=/home/${{ secrets.PROD_USER }}/app
+            Environment="PATH=/home/${{ secrets.PROD_USER }}/app/venv/bin"
+            ExecStart=/home/${{ secrets.PROD_USER }}/app/venv/bin/python app.py
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+            sudo systemctl daemon-reload
+            sudo systemctl restart flask-app
+            sudo systemctl enable flask-app
+          '
