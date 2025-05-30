@@ -36,7 +36,7 @@ jobs:
 
       - name: Decode SSH Key
         run: |
-          echo "${{ secrets.AWS_SSH_KEY }}"  > key.pem
+          echo "${{ secrets.AWS_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
       - name: Deploy to EC2
@@ -53,13 +53,53 @@ jobs:
           fi
 
           ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@$HOST <<EOF
+            # Create app directory if it doesn't exist
+            mkdir -p app
             cd app
+
+            # Initialize git if needed
+            if [ ! -d .git ]; then
+              git init
+              git remote add origin https://github.com/${GITHUB_REPOSITORY}.git
+            fi
+
+            # Configure git
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action"
+
+            # Update code
             git fetch --all
             git checkout $BRANCH
             git pull origin $BRANCH
+
+            # Setup environment
             echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
             python3 -m venv venv
             source venv/bin/activate
             pip install -r requirements.txt
-            sudo systemctl restart flaskapp
+
+            # Create and setup systemd service if it doesn't exist
+            if [ ! -f /etc/systemd/system/flaskapp.service ]; then
+              sudo bash -c 'cat > /etc/systemd/system/flaskapp.service << EOL
+[Unit]
+Description=Flask App
+After=network.target
+
+[Service]
+User=${{ secrets.EC2_USER }}
+WorkingDirectory=/home/${{ secrets.EC2_USER }}/app
+Environment="PATH=/home/${{ secrets.EC2_USER }}/app/venv/bin"
+ExecStart=/home/${{ secrets.EC2_USER }}/app/venv/bin/python app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOL'
+              sudo systemctl daemon-reload
+              sudo systemctl enable flaskapp
+            fi
+
+            # Restart service
+            sudo systemctl restart flaskapp || echo "Failed to restart service"
+            sudo systemctl status flaskapp
           EOF
