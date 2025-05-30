@@ -54,20 +54,17 @@ jobs:
             username: ${{ secrets.STAGING_USER }}
             key: ${{ secrets.AWS_SSH_KEY }}
             script: |
+              set +e  # Don't exit on error
+              
               echo "Setting up application..."
               cd ~/app
               
               echo "Cleaning up existing process..."
-              if pgrep -f "python app.py" > /dev/null; then
-                  echo "Stopping existing process..."
-                  pkill -f "python app.py"
-                  sleep 2
-              else
-                  echo "No existing process found"
-              fi
+              pkill -f "python app.py" || true
+              sleep 2
               
               echo "Setting up Python environment..."
-              python3 -m venv venv || echo "Virtual environment might already exist"
+              python3 -m venv venv || true
               source venv/bin/activate
               
               echo "Installing requirements..."
@@ -76,24 +73,25 @@ jobs:
               echo "Setting up environment variables..."
               echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
               
+              set -e  # Exit on error from this point
+              
               echo "Starting application..."
               nohup python app.py > app.log 2>&1 &
               
               echo "Waiting for application to start..."
               sleep 5
               
-              echo "Checking if application is running..."
-              if pgrep -f "python app.py" > /dev/null; then
+              # Check if app is running
+              if ps aux | grep -v grep | grep "python app.py" > /dev/null; then
                   echo "Application started successfully"
-                  echo "Process ID: $(pgrep -f 'python app.py')"
-                  echo "Last few lines of log:"
+                  echo "Process information:"
+                  ps aux | grep "python app.py" | grep -v grep
+                  echo "Log contents:"
                   tail -n 10 app.log
-                  echo "Port status:"
-                  netstat -tulnp | grep 5000 || echo "Port info not available"
                   exit 0
               else
                   echo "Application failed to start"
-                  echo "Log contents:"
+                  echo "Full log contents:"
                   cat app.log
                   exit 1
               fi
