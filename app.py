@@ -4,6 +4,9 @@ from bson import ObjectId
 from bson.regex import Regex
 from dotenv import load_dotenv
 import os
+import signal
+import sys
+
 
 # Load environment variables first
 load_dotenv()
@@ -103,7 +106,14 @@ def get_by_name(name):
         return jsonify(students_list), 200
     return jsonify({"error": "No students found with the given name"}), 404
 
-#if __name__ == '__main__':
- #   app.run(debug=True, host='0.0.0.0', port=5000)
+
+
+def signal_handler(sig, frame):
+    print('Shutting down gracefully...')
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000)
