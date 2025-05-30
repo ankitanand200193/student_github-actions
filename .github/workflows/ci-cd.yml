@@ -31,51 +31,69 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
 
   deploy-staging:
-    needs: test
-    if: github.ref == 'refs/heads/staging'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v2
+      needs: test
+      if: github.ref == 'refs/heads/staging'
+      runs-on: ubuntu-latest
       
-      - name: Set up SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
-      
-      - name: Deploy to Staging
-        run: |
-          scp -r ./* ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}:~/app
-          ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} '
-            cd ~/app
-            sudo apt-get update
-            sudo apt-get install -y python3-pip python3-venv
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install -r requirements.txt
-            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
-            # Setup systemd service
-            sudo tee /etc/systemd/system/flask-app.service << EOF
-            [Unit]
-            Description=Flask App
-            After=network.target
+      steps:
+        - uses: actions/checkout@v2
+        
+        - name: Set up SSH key
+          run: |
+            mkdir -p ~/.ssh
+            echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
+        
+        - name: Debug Connection
+          run: |
+            echo "Attempting to connect to staging server..."
+            ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} 'echo "SSH connection successful"'
+        
+        - name: Deploy to Staging
+          run: |
+            echo "Starting deployment..."
+            scp -r ./* ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}:~/app
+            ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} '
+              echo "Setting up application..."
+              cd ~/app
+              
+              # Kill any existing Python processes
+              pkill -f "python app.py" || true
+              
+              # Setup virtual environment
+              python3 -m venv venv
+              source venv/bin/activate
+              pip install -r requirements.txt
+              
+              # Setup environment variables
+              echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
+              
+              # Start the application in the background with nohup
+              echo "Starting application..."
+              nohup python app.py > app.log 2>&1 &
+              
+              # Wait a moment and check if it started
+              sleep 5
+              
+              # Verify the application is running
+              if pgrep -f "python app.py" > /dev/null; then
+                  echo "Application started successfully"
+                  # Show the last few lines of the log
+                  tail -n 10 app.log
+              else
+                  echo "Application failed to start"
+                  cat app.log
+                  exit 1
+              fi
+              
+              # Show running processes
+              ps aux | grep python
+              
+              # Show port usage
+              netstat -tulnp | grep 5000 || true
+            '
 
-            [Service]
-            User=${{ secrets.STAGING_USER }}
-            WorkingDirectory=/home/${{ secrets.STAGING_USER }}/app
-            Environment="PATH=/home/${{ secrets.STAGING_USER }}/app/venv/bin"
-            ExecStart=/home/${{ secrets.STAGING_USER }}/app/venv/bin/python app.py
-            Restart=always
-
-            [Install]
-            WantedBy=multi-user.target
-            EOF
-            sudo systemctl daemon-reload
-            sudo systemctl restart flask-app
-            sudo systemctl enable flask-app
-          '
 
   deploy-production:
     needs: [test]
