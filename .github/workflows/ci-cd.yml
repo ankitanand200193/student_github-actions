@@ -60,7 +60,7 @@ jobs:
             # Initialize git repo if not already initialized
             if [ ! -d .git ]; then
               git init
-              git remote add origin https://github.com/${{ github.repository }}.git
+              git remote add origin https://github.com/ankitanand200193/student_github-actions.git
             fi
             
             git fetch --all
