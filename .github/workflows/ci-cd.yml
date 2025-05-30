@@ -5,121 +5,60 @@ on:
     branches:
       - main
       - staging
+  release:
+    types: [created]
 
 jobs:
-  test:
+  deploy:
     runs-on: ubuntu-latest
+    env:
+      MONGO_URI: ${{ secrets.MONGO_URI }}
     steps:
-      - uses: actions/checkout@v2
-      
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 
+
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      
-      - name: Install dependencies
+
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest python-dotenv
-      
-      - name: Run tests
-        run: |
-          pytest -v
-        env:
-          MONGO_URI: ${{ secrets.MONGO_URI }}
-          PYTHONPATH: ${{ github.workspace }}
 
-  deploy-staging:
-    needs: test
-    if: github.ref == 'refs/heads/staging'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up SSH key
+      - name: Run Tests
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.STAGING_HOST }} >> ~/.ssh/known_hosts
-      
-      - name: Deploy to Staging
+          pip install pytest
+          pytest
+
+      - name: Decode SSH Key
         run: |
-          scp -r ./* ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}:~/app
-          ssh ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} '
-            cd ~/app
-            sudo apt-get update
-            sudo apt-get install -y python3-pip python3-venv
-            python3 -m venv venv
+          echo "${{ secrets.AWS_SSH_KEY }}" | base64 --decode > key.pem
+          chmod 600 key.pem
+
+      - name: Deploy to EC2
+        if: github.ref == 'refs/heads/staging' || github.event_name == 'release'
+        run: |
+          HOST=""
+          BRANCH=""
+          if [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            HOST=${{ secrets.STAGING_HOST }}
+            BRANCH="staging"
+          elif [ "${{ github.event_name }}" == "release" ]; then
+            HOST=${{ secrets.PROD_HOST }}
+            BRANCH="main"
+          fi
+
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@$HOST <<EOF
+            cd GithubActions_FlaskApp
+            git fetch --all
+            git checkout $BRANCH
+            git pull origin $BRANCH
+            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
             source venv/bin/activate
             pip install -r requirements.txt
-            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
-            # Setup systemd service
-            sudo tee /etc/systemd/system/flask-app.service << EOF
-            [Unit]
-            Description=Flask App
-            After=network.target
-
-            [Service]
-            User=${{ secrets.STAGING_USER }}
-            WorkingDirectory=/home/${{ secrets.STAGING_USER }}/app
-            Environment="PATH=/home/${{ secrets.STAGING_USER }}/app/venv/bin"
-            ExecStart=/home/${{ secrets.STAGING_USER }}/app/venv/bin/python app.py
-            Restart=always
-
-            [Install]
-            WantedBy=multi-user.target
-            EOF
-            sudo systemctl daemon-reload
-            sudo systemctl restart flask-app
-            sudo systemctl enable flask-app
-          '
-
-  deploy-production:
-    needs: [test]
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AWS_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.PROD_HOST }} >> ~/.ssh/known_hosts
-      
-      - name: Deploy to Production
-        run: |
-          scp -r ./* ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:~/app
-          ssh ${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }} '
-            cd ~/app
-            sudo apt-get update
-            sudo apt-get install -y python3-pip python3-venv
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install -r requirements.txt
-            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
-            # Setup systemd service
-            sudo tee /etc/systemd/system/flask-app.service << EOF
-            [Unit]
-            Description=Flask App
-            After=network.target
-
-            [Service]
-            User=${{ secrets.PROD_USER }}
-            WorkingDirectory=/home/${{ secrets.PROD_USER }}/app
-            Environment="PATH=/home/${{ secrets.PROD_USER }}/app/venv/bin"
-            ExecStart=/home/${{ secrets.PROD_USER }}/app/venv/bin/python app.py
-            Restart=always
-
-            [Install]
-            WantedBy=multi-user.target
-            EOF
-            sudo systemctl daemon-reload
-            sudo systemctl restart flask-app
-            sudo systemctl enable flask-app
-          '
+            sudo systemctl restart flaskapp
+          EOF
