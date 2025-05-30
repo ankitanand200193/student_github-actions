@@ -31,70 +31,121 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
 
   deploy-staging:
-      needs: test
-      if: github.ref == 'refs/heads/staging'
-      runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v2
       
-      steps:
-        - uses: actions/checkout@v2
-        
-        - name: Copy files to staging
-          uses: appleboy/scp-action@master
-          with:
-            host: ${{ secrets.STAGING_HOST }}
-            username: ${{ secrets.STAGING_USER }}
-            key: ${{ secrets.AWS_SSH_KEY }}
-            source: "."
-            target: "~/app"
-        
-        - name: Deploy to Staging
-          uses: appleboy/ssh-action@master
-          with:
-            host: ${{ secrets.STAGING_HOST }}
-            username: ${{ secrets.STAGING_USER }}
-            key: ${{ secrets.AWS_SSH_KEY }}
-            script: |
-              set +e  # Don't exit on error
-              
-              echo "Setting up application..."
-              cd ~/app
-              
-              echo "Cleaning up existing process..."
-              pkill -f "python app.py" || true
-              sleep 2
-              
-              echo "Setting up Python environment..."
-              python3 -m venv venv || true
-              source venv/bin/activate
-              
-              echo "Installing requirements..."
-              pip install -r requirements.txt
-              
-              echo "Setting up environment variables..."
-              echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
-              
-              set -e  # Exit on error from this point
-              
-              echo "Starting application..."
-              nohup python app.py > app.log 2>&1 &
-              
-              echo "Waiting for application to start..."
-              sleep 5
-              
-              # Check if app is running
-              if ps aux | grep -v grep | grep "python app.py" > /dev/null; then
-                  echo "Application started successfully"
-                  echo "Process information:"
-                  ps aux | grep "python app.py" | grep -v grep
-                  echo "Log contents:"
-                  tail -n 10 app.log
-                  exit 0
-              else
-                  echo "Application failed to start"
-                  echo "Full log contents:"
-                  cat app.log
-                  exit 1
-              fi
+      - name: Copy files to staging
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          source: "."
+          target: "~/app"
+      
+      - name: Deploy to Staging
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          script: |
+            # Debug information
+            echo "Starting deployment process..."
+            echo "Current directory: $(pwd)"
+            echo "User: $(whoami)"
+            
+            # Create deployment directory if it doesn't exist
+            mkdir -p ~/app
+            cd ~/app
+            
+            # Create a deployment script
+            cat > deploy.sh << 'EOL'
+            #!/bin/bash
+            
+            # Function to check if port is in use
+            check_port() {
+                netstat -tulpn 2>/dev/null | grep ":5000 "
+            }
+            
+            # Function to check if process is running
+            check_process() {
+                if [ -f "app.pid" ]; then
+                    if ps -p $(cat app.pid) > /dev/null 2>&1; then
+                        return 0
+                    fi
+                fi
+                return 1
+            }
+            
+            echo "Setting up Python environment..."
+            python3 -m venv venv
+            source venv/bin/activate
+            
+            echo "Installing requirements..."
+            pip install -r requirements.txt
+            
+            echo "Setting up environment variables..."
+            echo "MONGO_URI=$MONGO_URI" > .env
+            
+            # Stop existing process if running
+            if [ -f "app.pid" ]; then
+                echo "Stopping existing process..."
+                old_pid=$(cat app.pid)
+                if ps -p $old_pid > /dev/null 2>&1; then
+                    kill $old_pid || true
+                    sleep 2
+                fi
+            fi
+            
+            # Clear any existing port 5000 usage
+            if check_port; then
+                echo "Port 5000 is in use, attempting to free it..."
+                sudo fuser -k 5000/tcp || true
+                sleep 2
+            fi
+            
+            echo "Starting application..."
+            python app.py > app.log 2>&1 &
+            echo $! > app.pid
+            
+            echo "Waiting for application to start..."
+            sleep 5
+            
+            # Verify application is running
+            if check_process && check_port; then
+                echo "Application started successfully"
+                echo "Process ID: $(cat app.pid)"
+                echo "Last 10 lines of log:"
+                tail -n 10 app.log
+                exit 0
+            else
+                echo "Application failed to start"
+                echo "Process status:"
+                if [ -f "app.pid" ]; then
+                    ps -p $(cat app.pid) || echo "Process not found"
+                fi
+                echo "Port status:"
+                check_port || echo "Port 5000 not in use"
+                echo "Log contents:"
+                cat app.log
+                exit 1
+            fi
+            EOL
+            
+            # Make script executable
+            chmod +x deploy.sh
+            
+            # Export MongoDB URI for the script
+            export MONGO_URI="${{ secrets.MONGO_URI }}"
+            
+            # Run deployment script
+            ./deploy.sh
+
 
   deploy-production:
     needs: [test]
