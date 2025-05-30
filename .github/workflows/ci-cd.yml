@@ -34,7 +34,7 @@ jobs:
           pip install pytest
           pytest
 
-      - name: Decode SSH Key
+      - name: Setup SSH Key
         run: |
           echo "${{ secrets.AWS_SSH_KEY }}" > key.pem
           chmod 600 key.pem
@@ -53,10 +53,20 @@ jobs:
 
           ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@$HOST <<EOF
             set -e
+            # Create app directory if it doesn't exist
+            mkdir -p app
             cd app || { echo "Failed to cd into app directory"; exit 1; }
+            
+            # Initialize git repo if not already initialized
+            if [ ! -d .git ]; then
+              git init
+              git remote add origin https://github.com/${{ github.repository }}.git
+            fi
+            
             git fetch --all
-            git checkout $BRANCH
+            git checkout $BRANCH || git checkout -b $BRANCH
             git pull origin $BRANCH
+            
             echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
             python3 -m venv venv || echo "Virtual environment already exists"
             source venv/bin/activate || { echo "Failed to activate venv"; exit 1; }
