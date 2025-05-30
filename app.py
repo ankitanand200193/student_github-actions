@@ -7,9 +7,13 @@ import os
 import signal
 import sys
 
+# Signal handling for graceful shutdown
+def signal_handler(sig, frame):
+    print('Shutting down gracefully...')
+    sys.exit(0)
 
-# Load environment variables first
-load_dotenv()
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -41,7 +45,7 @@ except Exception as e:
     print(f"Error connecting to MongoDB: {e}")
     raise
 
-# Database functions
+# Your existing database functions
 def add_student(data):
     student = {"name": data["name"], "age": data["age"]}
     result = students_collection.insert_one(student)
@@ -66,7 +70,7 @@ def delete_student(student_id):
         return {"message": "Deleted"}
     return {"error": "Student not found"}
 
-# Flask routes
+# Your existing Flask routes
 @app.route('/')
 def home():
     return "Welcome to the Student Management System 9.0 API!", 200
@@ -105,15 +109,6 @@ def get_by_name(name):
     if students_list:
         return jsonify(students_list), 200
     return jsonify({"error": "No students found with the given name"}), 404
-
-
-
-def signal_handler(sig, frame):
-    print('Shutting down gracefully...')
-    sys.exit(0)
-
-signal.signal(signal.SIGTERM, signal_handler)
-signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
