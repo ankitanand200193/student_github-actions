@@ -1,7 +1,0 @@
-student_app/__pycache__
-student_app/.pytest_cache
-__pycache__
-.pytest_cache
-*.py[cod]
-student_data.py
-.env
